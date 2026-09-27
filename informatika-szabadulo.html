@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rendszermag – Informatikai szabadulószoba</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050912; --floor:#0a1120; --grid:rgba(88,200,255,.10);
+  --cyan:#5fe3ff; --violet:#b98bff; --amber:#ffb020; --ok:#7be69b; --bad:#ff6b6b;
+  --ink:#eaf3ff; --muted:#7d8fae; --panel:rgba(10,18,34,.92); --line:rgba(95,227,255,.28);
+  box-sizing:border-box; color-scheme:dark;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);
+  font:15px/1.5 'Space Grotesk',system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+
+#stage{position:fixed;inset:0}
+#floor{position:absolute;left:4%;right:4%;bottom:4%;top:140px;border-radius:18px;background:
+  radial-gradient(120% 90% at 50% 0%,rgba(95,227,255,.08),transparent 60%),
+  repeating-linear-gradient(var(--grid) 0 1px,transparent 1px 40px),
+  repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 40px),
+  var(--floor);
+  border:1px solid var(--line); box-shadow:0 0 60px rgba(95,227,255,.06) inset, 0 30px 80px rgba(0,0,0,.6);
+  overflow:hidden;
+}
+.node{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;
+  display:grid;place-items:center;font-size:26px;cursor:default;
+  border:1.5px solid rgba(125,143,174,.4);background:rgba(20,28,48,.7);
+  transition:border-color .25s,box-shadow .25s,transform .25s;color:var(--muted)}
+.node .lbl{position:absolute;top:70px;left:50%;transform:translateX(-50%);white-space:nowrap;
+  font-size:11.5px;color:var(--muted);letter-spacing:.02em}
+.node.near{border-color:var(--cyan);box-shadow:0 0 22px rgba(95,227,255,.45);color:var(--cyan);cursor:pointer;transform:scale(1.08)}
+.node.near .lbl{color:var(--ink)}
+.node.solved{border-color:var(--ok);color:var(--ok);box-shadow:0 0 16px rgba(123,230,155,.35)}
+.node.door{width:78px;height:78px;margin:-39px 0 0 -39px;font-size:30px}
+.node.door.ready{border-color:var(--amber);color:var(--amber);box-shadow:0 0 26px rgba(255,176,32,.5)}
+
+#player{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;z-index:5;
+  font-size:26px;line-height:30px;text-align:center;
+  filter:drop-shadow(0 0 8px rgba(255,80,80,.55));transition:transform .12s linear}
+
+.hud{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:16px;right:16px;
+  display:flex;justify-content:space-between;align-items:flex-start;gap:10px;pointer-events:none}
+.card{pointer-events:auto;background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);
+  border-radius:12px;padding:12px 16px;max-width:380px}
+.card h1{font:600 17px/1.2 'Space Grotesk';margin:0 0 6px;color:var(--cyan);letter-spacing:.01em}
+.card p{margin:0;font-size:13px;color:var(--muted)}
+.prog{display:flex;gap:6px;margin-top:10px}
+.bit{width:26px;height:30px;border:1px solid var(--line);border-radius:6px;display:grid;place-items:center;
+  font:600 15px 'JetBrains Mono';color:var(--muted)}
+.bit.on{color:var(--ok);border-color:var(--ok);background:rgba(123,230,155,.08)}
+#keys{pointer-events:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:9px 12px;font-size:12px;color:var(--muted);max-width:230px;text-align:right}
+kbd{font:11px 'JetBrains Mono';padding:1px 6px;border:1px solid var(--line);border-radius:4px;color:var(--ink)}
+
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-size:13.5px;
+  max-width:min(520px,90vw);text-align:center;pointer-events:none;transition:opacity .25s;opacity:0;z-index:9}
+#toast.show{opacity:1}
+
+#modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(3,6,14,.72);padding:16px;z-index:10}
+#modal[hidden]{display:none}
+#mbox{width:min(480px,100%);border-radius:14px;padding:22px 24px;background:rgba(12,20,38,.97);
+  border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+#mbox .cat{font-size:11.5px;color:var(--violet);letter-spacing:.05em;margin:0 0 6px}
+#mbox h2{font:600 20px 'Space Grotesk';margin:0 0 10px;color:var(--ink)}
+#mbox p.q{margin:0 0 16px;font-size:14.5px;color:var(--ink)}
+.opts{display:grid;gap:8px}
+.opts button{text-align:left;font:inherit;font-size:14px;color:var(--ink);background:rgba(255,255,255,.04);
+  border:1px solid var(--line);border-radius:8px;padding:10px 13px;cursor:pointer}
+.opts button:hover{border-color:var(--cyan);background:rgba(95,227,255,.08)}
+.opts button:disabled{opacity:.5;cursor:default}
+.opts button.correct{border-color:var(--ok);background:rgba(123,230,155,.14)}
+.opts button.wrong{border-color:var(--bad);background:rgba(255,107,107,.14)}
+.msg{min-height:1.4em;margin:12px 0 0;font-size:13.5px}
+.msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}
+.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+button.pri{font:inherit;font-size:13.5px;font-weight:600;color:#04121a;background:var(--cyan);
+  border:none;border-radius:999px;padding:8px 16px;cursor:pointer}
+button.gh{font:inherit;font-size:13.5px;color:var(--ink);background:transparent;border:1px solid var(--line);
+  border-radius:999px;padding:8px 16px;cursor:pointer}
+.padgrid{display:grid;grid-template-columns:repeat(2,64px);gap:10px;justify-content:center;margin:16px 0}
+.padgrid button{border-radius:8px;padding:14px 0;font:600 20px 'JetBrains Mono';background:rgba(255,255,255,.05);
+  border:1px solid var(--line);color:var(--ink);cursor:pointer}
+.code{display:flex;gap:8px;justify-content:center;margin:6px 0 0}
+.code span{width:32px;height:40px;border:1px solid var(--line);border-radius:6px;display:grid;place-items:center;
+  font:600 18px 'JetBrains Mono'}
+#joy{position:fixed;left:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:110px;height:110px;
+  border-radius:50%;background:rgba(10,18,34,.6);border:1px solid var(--line);display:none;touch-action:none}
+#knob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;
+  background:rgba(95,227,255,.6)}
+@media (pointer:coarse){#joy{display:block}#keys{display:none}}
+@media (max-width:640px){.hud{flex-direction:column-reverse}.card{max-width:none}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="floor">
+    <div id="player">🐞</div>
+  </div>
+</div>
+
+<div class="hud">
+  <div class="card">
+    <h1>Rendszermag</h1>
+    <p id="goalTxt">10 perced van! Járd be a termet, gyűjtsd össze a hat hologram bináris jelét, és nyisd ki a zárt kaput. Minden rossz válasz +30 mp büntetés.</p>
+    <div class="prog" id="prog"></div>
+  </div>
+  <div class="right" style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+    <div class="card" id="timerCard" style="text-align:center;min-width:96px;padding:8px 16px">
+      <p style="margin:0;font-size:10.5px;color:var(--muted)">Hátralévő idő</p>
+      <p id="timerTxt" style="margin:2px 0 0;font:700 20px 'JetBrains Mono';color:var(--cyan)">10:00</p>
+    </div>
+    <div id="keys">Mozgás: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> vagy nyilak<br>Kattintás / <kbd>Enter</kbd>: vizsgálat a közeli hologramnál</div>
+  </div>
+</div>
+
+<div id="joy"><div id="knob"></div></div>
+<div id="toast"></div>
+
+<div id="modal" hidden><div id="mbox"></div></div>
+
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const floor=$('#floor'),player=$('#player'),modal=$('#modal'),mbox=$('#mbox'),toastEl=$('#toast'),progEl=$('#prog');
+const hudEl=document.querySelector('.hud');
+function layoutFloor(){ floor.style.top=(hudEl.getBoundingClientRect().height+18)+'px'; }
+layoutFloor(); addEventListener('resize',layoutFloor); addEventListener('orientationchange',()=>setTimeout(layoutFloor,150));
+
+/* ---- állomások (x,y % a szobán belül) ---- */
+const STATIONS=[
+ {id:'q42',x:16,y:24,icon:'∞',label:'A Válasz',bit:'1',
+  cat:'Szám és filozófia', title:'A Végső Válasz',
+  q:'Egy fiktív szuperszámítógép 7,5 millió évig számolt, hogy megválaszolja „az élet, a világegyetem és minden” kérdését. Mi lett a végeredmény?',
+  opts:['7','13','42','100'], correct:2},
+ {id:'pioneer',x:50,y:16,icon:'🜂',label:'Úttörők',bit:'0',
+  cat:'Informatikatörténet', title:'Az első programozó',
+  q:'Kit tartanak az első számítógépes programozónak, aki a XIX. században algoritmust írt egy elméleti számológéphez?',
+  opts:['Alan Turing','Ada Lovelace','Grace Hopper','Bill Gates'], correct:1},
+ {id:'parts',x:84,y:24,icon:'▣',label:'Alkatrészek',bit:'1',
+  cat:'Hardver', title:'A gép agya',
+  q:'Melyik alkatrész hajtja végre a programok utasításait, ezért a számítógép „agyának” is nevezik?',
+  opts:['RAM','Tápegység','CPU','SSD'], correct:2},
+ {id:'os',x:16,y:76,icon:'⌘',label:'Op. rendszerek',bit:'1',
+  cat:'Szoftver', title:'Nyílt alapkő',
+  q:'Melyik operációs rendszer nyílt forráskódú, és számos elterjedt disztribúció (pl. Ubuntu, Fedora) alapja?',
+  opts:['Windows','macOS','Linux','iOS'], correct:2},
+ {id:'robo',x:50,y:84,icon:'◎',label:'Robotika',bit:'0',
+  cat:'Robotika', title:'Három törvény',
+  q:'Ki fogalmazta meg a robotika három alaptörvényét, melyek megvédenék az embereket a robotoktól?',
+  opts:['Isaac Asimov','Karel Čapek','Alan Turing','Elon Musk'], correct:0},
+ {id:'lang',x:84,y:76,icon:'λ',label:'Nyelvek',bit:'1',
+  cat:'Programozás', title:'Nem a kígyóról',
+  q:'Melyik programozási nyelvet nevezték el egy brit komikuscsoportról, nem pedig a hüllőről?',
+  opts:['Java','C++','Ruby','Python'], correct:3},
+];
+const DOOR={x:50,y:50,icon:'⌾'};
+const CODE=STATIONS.map(s=>s.bit).join(''); // "101101"
+
+/* ---- állapot ---- */
+const solved=new Set();
+let pos={x:50,y:50}, keys={}, jx=0, jy=0, modalOpen=false, facing=0, gameOver=false;
+const TIME_LIMIT=600; // 10 perc
+let timeEnd=Date.now()+TIME_LIMIT*1000;
+const timerTxt=$('#timerTxt');
+function fmt(sec){ sec=Math.max(0,sec); const m=String(Math.floor(sec/60)).padStart(2,'0'), s=String(sec%60).padStart(2,'0'); return m+':'+s; }
+function showEnd(win){
+  gameOver=true; modalOpen=true; modal.hidden=false;
+  const remain=Math.max(0,Math.ceil((timeEnd-Date.now())/1000));
+  const elapsed=TIME_LIMIT-remain;
+  mbox.innerHTML = win
+    ? `<p class="cat">Sikeres szökés</p><h2>Kijutottál!</h2><p class="q">A kapu zárja kioldott. Teljesítési idő: <b>${fmt(elapsed)}</b></p><div class="actions"><button class="pri" id="restartBtn">Újraindítás</button></div>`
+    : `<p class="cat">Idő lejárt</p><h2>Vesztettél</h2><p class="q">A 10 perc lejárt, mielőtt kinyitottad volna a kaput.</p><div class="actions"><button class="pri" id="restartBtn">Újraindítás</button></div>`;
+  mbox.querySelector('#restartBtn').onclick=()=>location.reload();
+}
+function triggerLose(){ if(!gameOver) showEnd(false); }
+
+/* ---- csomópontok kirajzolása ---- */
+STATIONS.forEach(s=>{
+  const n=document.createElement('div');
+  n.className='node'; n.id='n-'+s.id;
+  n.style.left=s.x+'%'; n.style.top=s.y+'%';
+  n.innerHTML=`${s.icon}<span class="lbl">${s.label}</span>`;
+  n.onclick=()=>{ if(n.classList.contains('near') && !solved.has(s.id)) openPuzzle(s); };
+  floor.appendChild(n);
+});
+const doorNode=document.createElement('div');
+doorNode.className='node door'; doorNode.id='n-door';
+doorNode.style.left=DOOR.x+'%'; doorNode.style.top=DOOR.y+'%';
+doorNode.innerHTML=`${DOOR.icon}<span class="lbl">Zárolt kapu</span>`;
+doorNode.onclick=()=>{ if(doorNode.classList.contains('near')){ solved.size===STATIONS.length ? openDoor() : toast('A kapu még zárolva van — gyűjtsd össze mind a 6 bitet.'); } };
+floor.appendChild(doorNode);
+
+function renderProg(){
+  progEl.innerHTML='';
+  STATIONS.forEach(s=>{
+    const b=document.createElement('div'); b.className='bit'+(solved.has(s.id)?' on':'');
+    b.textContent=solved.has(s.id)?s.bit:'·';
+    progEl.appendChild(b);
+  });
+}
+renderProg();
+
+function toast(msg){ toastEl.textContent=msg; toastEl.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove('show'),2600); }
+
+/* ---- puzzle modal ---- */
+function openPuzzle(s){
+  modalOpen=true; modal.hidden=false;
+  mbox.innerHTML=`<p class="cat">${s.cat}</p><h2>${s.title}</h2><p class="q">${s.q}</p>
+    <div class="opts">${s.opts.map((o,i)=>`<button data-i="${i}">${o}</button>`).join('')}</div>
+    <p class="msg" aria-live="polite"></p>
+    <div class="actions"><button class="gh" id="closeP">Vissza a terembe</button></div>`;
+  const msg=mbox.querySelector('.msg');
+  mbox.querySelectorAll('.opts button').forEach(btn=>{
+    btn.onclick=()=>{
+      const i=+btn.dataset.i;
+      if(i===s.correct){
+        btn.classList.add('correct'); mbox.querySelectorAll('.opts button').forEach(b=>b.disabled=true);
+        msg.className='msg ok'; msg.textContent=`Helyes! A hologram bináris jele: ${s.bit}`;
+        solved.add(s.id); renderProg();
+        document.getElementById('n-'+s.id).classList.add('solved');
+        setTimeout(closeModal,900);
+        if(solved.size===STATIONS.length){ setTimeout(()=>toast('Mind a 6 jelet begyűjtötted — a kapu készen áll!'),1000); }
+      } else {
+        btn.classList.add('wrong'); msg.className='msg bad'; msg.textContent='Ez nem az. Próbáld újra. (+30 mp büntetés)';
+        timeEnd-=30000; toast('-30 másodperc büntetés!');
+      }
+    };
+  });
+  mbox.querySelector('#closeP').onclick=closeModal;
+}
+function closeModal(){ modal.hidden=true; modalOpen=false; }
+
+/* ---- kilépő kapu ---- */
+function openDoor(){
+  modalOpen=true; modal.hidden=false;
+  mbox.innerHTML=`<p class="cat">Zárolt kapu</p><h2>Add meg a 6 bites kódot</h2>
+    <p class="q">Illeszd össze a hologramoktól kapott biteket a begyűjtés sorrendjében, és add meg a kaput vezérlő rendszernek.</p>
+    <div class="code">${STATIONS.map(()=>'<span></span>').join('')}</div>
+    <div class="padgrid"><button data-d="0">0</button><button data-d="1">1</button>
+      <button data-b style="grid-column:span 2">⌫ Törlés</button></div>
+    <p class="msg" aria-live="polite"></p>
+    <div class="actions"><button class="gh" id="closeD">Vissza</button><button class="pri" id="okD">Megerősít</button></div>`;
+  let v=''; const spans=[...mbox.querySelectorAll('.code span')], msg=mbox.querySelector('.msg');
+  const upd=()=>spans.forEach((sp,i)=>sp.textContent=v[i]||'');
+  mbox.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ if(v.length<CODE.length){v+=b.dataset.d; upd();} });
+  mbox.querySelector('[data-b]').onclick=()=>{ v=v.slice(0,-1); upd(); };
+  mbox.querySelector('#okD').onclick=()=>{
+    if(v===CODE){ showEnd(true); }
+    else { msg.className='msg bad'; msg.textContent='Hibás kód. Ellenőrizd a hat hologram sorrendjét.'; v=''; upd(); }
+  };
+  mbox.querySelector('#closeD').onclick=closeModal;
+}
+
+/* ---- mozgás: WASD/nyilak ---- */
+addEventListener('keydown',e=>{ keys[e.code]=true; if(e.code==='Enter'){ const near=document.querySelector('.node.near'); if(near) near.onclick(); } });
+addEventListener('keyup',e=>keys[e.code]=false);
+
+const joy=$('#joy'),knob=$('#knob'); let joyId=null;
+joy.addEventListener('pointerdown',e=>{ joyId=e.pointerId; joy.setPointerCapture(joyId); });
+joy.addEventListener('pointermove',e=>{
+  if(e.pointerId!==joyId) return;
+  const r=joy.getBoundingClientRect(), dx=e.clientX-(r.left+r.width/2), dy=e.clientY-(r.top+r.height/2);
+  const d=Math.min(1,Math.hypot(dx,dy)/40); const a=Math.atan2(dy,dx);
+  jx=Math.cos(a)*d; jy=Math.sin(a)*d; knob.style.transform=`translate(${jx*30}px,${jy*30}px)`;
+});
+['pointerup','pointercancel'].forEach(ev=>joy.addEventListener(ev,()=>{ joyId=null; jx=0; jy=0; knob.style.transform=''; }));
+
+function nearestStation(){
+  let best=null,bd=9e9;
+  [...STATIONS,{id:'door',x:DOOR.x,y:DOOR.y}].forEach(s=>{
+    const dx=s.x-pos.x, dy=s.y-pos.y, d=Math.hypot(dx,dy);
+    if(d<bd){bd=d;best=s;}
+  });
+  return {best,bd};
+}
+function tick(){
+  if(!gameOver){
+    const remain=Math.max(0,Math.ceil((timeEnd-Date.now())/1000));
+    timerTxt.textContent=fmt(remain);
+    timerTxt.style.color = remain<=60 ? 'var(--bad)' : 'var(--cyan)';
+    if(remain<=0){ triggerLose(); }
+  }
+  if(!modalOpen && !gameOver){
+    let dx=0,dy=0;
+    if(keys.KeyW||keys.ArrowUp) dy-=1; if(keys.KeyS||keys.ArrowDown) dy+=1;
+    if(keys.KeyA||keys.ArrowLeft) dx-=1; if(keys.KeyD||keys.ArrowRight) dx+=1;
+    dx+=jx; dy+=jy;
+    const l=Math.hypot(dx,dy);
+    if(l>0.05){
+      dx/=l; dy/=l;
+      pos.x=Math.max(4,Math.min(96,pos.x+dx*0.7));
+      pos.y=Math.max(6,Math.min(94,pos.y+dy*0.7));
+      facing=Math.atan2(dy,dx)*180/Math.PI+90;
+    }
+    player.style.left=pos.x+'%'; player.style.top=pos.y+'%';
+    player.style.transform=`rotate(${facing}deg)`;
+    const {best,bd}=nearestStation();
+    document.querySelectorAll('.node').forEach(n=>n.classList.remove('near'));
+    if(bd<12){
+      const el = best.id==='door' ? doorNode : document.getElementById('n-'+best.id);
+      if(!(best.id!=='door' && solved.has(best.id))) el.classList.add('near');
+      else if(best.id==='door') el.classList.add('near');
+    }
+    if(solved.size===STATIONS.length) doorNode.classList.add('ready');
+  }
+  requestAnimationFrame(tick);
+}
+player.style.left='50%'; player.style.top='50%';
+requestAnimationFrame(tick);
+toast('Közelítsd meg a villódzó hologramokat, és oldd meg a hat feladványt.');
+})();
+</script>
+</body>
+</html>
